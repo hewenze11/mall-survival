@@ -47,6 +47,11 @@ export class GameRoom extends Room<GameState> {
     // Bind room to floor system for broadcasting
     this.floorSystem.setRoom(this);
 
+    // M4: Wire up WaveSystem broadcast so it can emit events to all clients
+    this.waveSystem.setBroadcast((event: string, data: unknown) => {
+      this.broadcast(event, data);
+    });
+
     // Register message handlers
     this.onMessage("move", (client, message: MoveMessage) => {
       this.handleMove(client, message);
@@ -100,6 +105,15 @@ export class GameRoom extends Room<GameState> {
     if (this.state.phase === "WAITING" && this.state.players.size === 1) {
       this.waveSystem.startPrep();
     }
+
+    // M4: Send current wave status immediately to the newly joined client
+    const progress = this.waveSystem.getWaveProgress();
+    client.send("wave_status", {
+      phase: this.state.phase,
+      currentWave: this.state.currentWave,
+      prepTimeRemaining: this.state.prepTimeRemaining,
+      waveProgress: progress,
+    });
 
     console.log(`[GameRoom] Player ${client.sessionId} spawned at (${player.x.toFixed(0)}, ${player.y.toFixed(0)}) floor ${player.currentFloor}. Total players: ${this.state.players.size}`);
   }
