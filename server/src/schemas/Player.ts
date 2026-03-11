@@ -21,4 +21,7 @@ export class Player extends Schema {
 
   @type("boolean")
   isAlive: boolean = true;
+
+  @type("number")
+  currentFloor: number = 1;
 }
