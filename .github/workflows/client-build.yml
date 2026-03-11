@@ -1,13 +1,15 @@
-name: Client Build
+name: Build & Deploy Web Client
 
 on:
   push:
     branches: [main]
     paths:
       - 'client/**'
+      - '.github/workflows/client-build.yml'
+  workflow_dispatch:
 
 jobs:
-  build-windows:
+  build-web:
     runs-on: ubuntu-latest
     container:
       image: barichello/godot-ci:4.2
@@ -17,28 +19,34 @@ jobs:
       - name: Setup export templates
         run: |
           mkdir -p ~/.local/share/godot/export_templates/4.2.stable
-          mv /root/.local/share/godot/export_templates/4.2.stable/* ~/.local/share/godot/export_templates/4.2.stable/ 2>/dev/null || true
+          mv /root/.local/share/godot/export_templates/4.2.stable/* \
+             ~/.local/share/godot/export_templates/4.2.stable/
 
-      - name: Export Windows
+      - name: Export Web build
+        working-directory: client
         run: |
-          mkdir -p build/windows
-          cd client
-          godot --headless --export-release "Windows Desktop" ../build/windows/MallSurvival.exe
+          mkdir -p build/web
+          godot --headless --export-release "Web" build/web/index.html 2>&1 || true
+          ls -la build/web/
 
-      - name: Export Linux
-        run: |
-          mkdir -p build/linux
-          cd client
-          godot --headless --export-release "Linux/X11" ../build/linux/MallSurvival.x86_64
-
-      - name: Upload Windows artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MallSurvival-Windows-${{ github.sha }}
-          path: build/windows/
+          name: web-build
+          path: client/build/web/
 
-      - name: Upload Linux artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: MallSurvival-Linux-${{ github.sha }}
-          path: build/linux/
+      - name: Deploy to game server
+        env:
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+        run: |
+          apt-get install -y sshpass rsync 2>/dev/null | tail -1
+          sshpass -p "$DEPLOY_PASSWORD" rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            client/build/web/ \
+            root@104.64.211.27:/var/www/html/game/
+          # 确保 download-server 容器也能服务此目录
+          sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no \
+            root@104.64.211.27 "
+              docker exec download-server nginx -s reload 2>/dev/null || true
+              echo 'Deploy OK'
+            "

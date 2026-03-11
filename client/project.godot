@@ -1,23 +1,12 @@
-; Engine configuration file.
-; It's best edited using the editor UI and not directly,
-; but the file format is well-documented and should still
-; be manually editable.
-;
-; FORMAT:
-;   [section] ; section goes between []
-;   param=value ; assign values to parameters
-
 config_version=5
 
 [application]
 
-config/name="Mall Survival"
-config/description="A top-down 2D survival game set in a mall"
-config/tags=PackedStringArray("2d", "multiplayer", "survival")
+config/name="大楼求生"
+config/description="Mall Survival - Multiplayer Zombie Wave Defense"
+config/tags=PackedStringArray("2d", "multiplayer", "survival", "rpg")
 run/main_scene="res://scenes/MainMenu.tscn"
-config/use_custom_user_dir=false
 config/features=PackedStringArray("4.2", "Forward Plus")
-boot_splash/show_image=true
 config/icon="res://icon.svg"
 
 [autoload]
@@ -26,8 +15,8 @@ NetworkManager="*res://scripts/NetworkManager.gd"
 
 [display]
 
-window/size/viewport_width=1280
-window/size/viewport_height=720
+window/size/viewport_width=640
+window/size/viewport_height=480
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
@@ -63,6 +52,11 @@ interact={
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":69,"key_label":0,"unicode":101,"echo":false,"script":null)
 ]
 }
+open_inventory={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":4194306,"physical_keycode":0,"key_label":0,"unicode":0,"echo":false,"script":null)
+]
+}
 
 [physics]
 
@@ -70,5 +64,4 @@ interact={
 
 [rendering]
 
-renderer/rendering_method="forward_plus"
 textures/canvas_textures/default_texture_filter=0

@@ -1,73 +1,73 @@
-[gd_scene load_steps=2 format=3 uid="uid://mainmenu_scene"]
+[gd_scene load_steps=2 format=3 uid="uid://mainmenu"]
 
-[ext_resource type="Script" path="res://scripts/MainMenu.gd" id="1_mainmenu"]
+[ext_resource type="Script" path="res://scripts/MainMenu.gd" id="1"]
 
 [node name="MainMenu" type="Control"]
-layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-script = ExtResource("1_mainmenu")
+layout_mode=3
+anchors_preset=15
+anchor_right=1.0
+anchor_bottom=1.0
+script=ExtResource("1")
 
-[node name="Background" type="ColorRect" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-color = Color(0.08, 0.1, 0.15, 1)
+[node name="BG" type="ColorRect" parent="."]
+layout_mode=1
+anchors_preset=15
+anchor_right=1.0
+anchor_bottom=1.0
+color=Color(0.07,0.07,0.12,1)
 
-[node name="CenterContainer" type="CenterContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode=1
+anchors_preset=15
+anchor_right=1.0
+anchor_bottom=1.0
 
-[node name="PanelContainer" type="PanelContainer" parent="CenterContainer"]
-layout_mode = 2
-custom_minimum_size = Vector2(480, 0)
+[node name="Panel" type="PanelContainer" parent="Center"]
+layout_mode=2
+custom_minimum_size=Vector2(400,0)
 
-[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/PanelContainer"]
-layout_mode = 2
-theme_override_constants/separation = 14
+[node name="VBox" type="VBoxContainer" parent="Center/Panel"]
+layout_mode=2
+theme_override_constants/separation=12
 
-[node name="TitleLabel" type="Label" parent="CenterContainer/PanelContainer/VBoxContainer"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 42
-theme_override_colors/font_color = Color(0.95, 0.78, 0.2, 1)
-text = "大楼求生"
-horizontal_alignment = 1
+[node name="Title" type="Label" parent="Center/Panel/VBox"]
+layout_mode=2
+theme_override_font_sizes/font_size=36
+theme_override_colors/font_color=Color(0.9,0.75,0.2,1)
+text="大楼求生"
+horizontal_alignment=1
 
-[node name="SubtitleLabel" type="Label" parent="CenterContainer/PanelContainer/VBoxContainer"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 14
-theme_override_colors/font_color = Color(0.6, 0.6, 0.7, 1)
-text = "Mall Survival - Multiplayer"
-horizontal_alignment = 1
+[node name="Sub" type="Label" parent="Center/Panel/VBox"]
+layout_mode=2
+theme_override_font_sizes/font_size=13
+theme_override_colors/font_color=Color(0.55,0.55,0.65,1)
+text="Mall Survival — 多人丧尸波次防御"
+horizontal_alignment=1
 
-[node name="HSep1" type="HSeparator" parent="CenterContainer/PanelContainer/VBoxContainer"]
-layout_mode = 2
+[node name="HSep" type="HSeparator" parent="Center/Panel/VBox"]
+layout_mode=2
 
-[node name="player_name_input" type="LineEdit" parent="CenterContainer/PanelContainer/VBoxContainer"]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 44)
-theme_override_font_sizes/font_size = 18
-placeholder_text = "输入玩家名（至少2个字符）"
-alignment = 1
+[node name="NameInput" type="LineEdit" parent="Center/Panel/VBox"]
+layout_mode=2
+custom_minimum_size=Vector2(0,40)
+theme_override_font_sizes/font_size=16
+placeholder_text="输入角色名"
+alignment=1
 
-[node name="RoomList" type="VBoxContainer" parent="CenterContainer/PanelContainer/VBoxContainer"]
-layout_mode = 2
-theme_override_constants/separation = 6
+[node name="RoomList" type="VBoxContainer" parent="Center/Panel/VBox"]
+layout_mode=2
+theme_override_constants/separation=6
 
-[node name="JoinButton" type="Button" parent="CenterContainer/PanelContainer/VBoxContainer"]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 48)
-theme_override_font_sizes/font_size = 20
-text = "加入游戏"
+[node name="JoinBtn" type="Button" parent="Center/Panel/VBox"]
+layout_mode=2
+custom_minimum_size=Vector2(0,44)
+theme_override_font_sizes/font_size=18
+text="⚔ 加入游戏"
 
-[node name="StatusLabel" type="Label" parent="CenterContainer/PanelContainer/VBoxContainer"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 14
-theme_override_colors/font_color = Color(0.5, 0.8, 1, 1)
-text = "正在获取房间列表..."
-horizontal_alignment = 1
-autowrap_mode = 3
+[node name="Status" type="Label" parent="Center/Panel/VBox"]
+layout_mode=2
+theme_override_font_sizes/font_size=13
+theme_override_colors/font_color=Color(0.5,0.8,1,1)
+text="正在获取房间列表..."
+horizontal_alignment=1
+autowrap_mode=3

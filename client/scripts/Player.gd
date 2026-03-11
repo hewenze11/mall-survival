@@ -1,86 +1,94 @@
 extends CharacterBody2D
 
-const SPEED: float = 200.0
-const MOVE_SEND_INTERVAL: float = 0.05
+const SPEED := 80.0   # 像素/秒，RPG风格不要太快
+const SEND_INTERVAL := 0.08
 
-const TEX_DOWN  = preload("res://assets/characters/player_down.png")
-const TEX_UP    = preload("res://assets/characters/player_up.png")
-const TEX_LEFT  = preload("res://assets/characters/player_left.png")
-const TEX_RIGHT = preload("res://assets/characters/player_right.png")
+# 方向枚举
+enum Dir { DOWN, LEFT, RIGHT, UP }
 
-var health: int = 100
-var hunger: int = 100
-var equipped_weapon: String = "none"
-var ammo: int = 0
-var _move_timer: float = 0.0
-var _last_sent_pos: Vector2 = Vector2.ZERO
+var health := 100
+var hunger := 100
+var is_local := true
+var _dir := Dir.DOWN
+var _moving := false
+var _anim_timer := 0.0
+var _anim_frame := 0  # 0=站立, 1=左脚, 2=右脚
+const ANIM_SPEED := 0.2
 
-@onready var name_label: Label = $NameLabel
-@onready var direction_indicator: Line2D = $DirectionIndicator
+var _send_timer := 0.0
+var _last_pos := Vector2.ZERO
+
 @onready var sprite: Sprite2D = $Sprite2D
+@onready var name_label: Label = $NameLabel
+@onready var shadow: Sprite2D = $Shadow
+
+# 精灵表参数（24x32 × 3帧）
+const SHEET_FRAME_W := 24
+const SHEET_FRAME_H := 32
 
 func _ready() -> void:
-	name_label.text = NetworkManager.local_player_name
-	if sprite:
-		sprite.texture = TEX_DOWN
-		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	NetworkManager.damage_received.connect(_on_damage_received)
+	name_label.text = NetworkManager.local_player_name if is_local else ""
+	_update_sprite()
 
 func _physics_process(delta: float) -> void:
-	_move_timer += delta
+	if not is_local:
+		return
 
-	# 用全局方向移动，不受节点 rotation 影响
-	var dir = Vector2.ZERO
-	if Input.is_action_pressed("move_up"):    dir.y -= 1
-	if Input.is_action_pressed("move_down"):  dir.y += 1
-	if Input.is_action_pressed("move_left"):  dir.x -= 1
-	if Input.is_action_pressed("move_right"): dir.x += 1
-	dir = dir.normalized()
-	velocity = dir * SPEED
+	var dir_vec := Vector2.ZERO
+	if Input.is_action_pressed("move_up"):    dir_vec.y -= 1; _dir = Dir.UP
+	if Input.is_action_pressed("move_down"):  dir_vec.y += 1; _dir = Dir.DOWN
+	if Input.is_action_pressed("move_left"):  dir_vec.x -= 1; _dir = Dir.LEFT
+	if Input.is_action_pressed("move_right"): dir_vec.x += 1; _dir = Dir.RIGHT
 
-	# 更新朝向贴图（不旋转节点，只换贴图）
-	if dir.length() > 0.01 and sprite:
-		if abs(dir.x) >= abs(dir.y):
-			sprite.texture = TEX_RIGHT if dir.x > 0 else TEX_LEFT
-		else:
-			sprite.texture = TEX_DOWN if dir.y > 0 else TEX_UP
-
-	# 朝向指示器朝向鼠标（仅 Line2D，不旋转整个节点）
-	if direction_indicator:
-		var mouse_local = to_local(get_global_mouse_position())
-		var mouse_dir = mouse_local.normalized() * 20.0
-		direction_indicator.clear_points()
-		direction_indicator.add_point(Vector2.ZERO)
-		direction_indicator.add_point(mouse_dir)
-
+	dir_vec = dir_vec.normalized()
+	_moving = dir_vec.length() > 0.01
+	velocity = dir_vec * SPEED
 	move_and_slide()
 
-	# 发送位置给服务端（节流）
-	if _move_timer >= MOVE_SEND_INTERVAL:
-		_move_timer = 0.0
-		if global_position.distance_to(_last_sent_pos) > 0.5 or not velocity.is_zero_approx():
-			_last_sent_pos = global_position
-			var angle = global_position.angle_to_point(get_global_mouse_position())
-			NetworkManager.send_move(global_position.x, global_position.y, angle)
+	# 帧动画
+	if _moving:
+		_anim_timer += delta
+		if _anim_timer >= ANIM_SPEED:
+			_anim_timer = 0.0
+			_anim_frame = 1 if _anim_frame != 1 else 2
+	else:
+		_anim_frame = 0
+	_update_sprite()
+
+	# 发送位置（节流）
+	_send_timer += delta
+	if _send_timer >= SEND_INTERVAL:
+		_send_timer = 0.0
+		var dir_str := ["down","left","right","up"][_dir]
+		NetworkManager.send_move(global_position.x, global_position.y, dir_str)
 
 func _input(event: InputEvent) -> void:
+	if not is_local: return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var mouse_world = get_global_mouse_position()
-		NetworkManager.send_shoot(mouse_world.x, mouse_world.y)
-		if direction_indicator:
-			direction_indicator.default_color = Color(1, 0.8, 0, 1)
-			await get_tree().create_timer(0.08).timeout
-			if is_instance_valid(direction_indicator):
-				direction_indicator.default_color = Color(1, 1, 0, 0.7)
+		var mp := get_global_mouse_position()
+		NetworkManager.send_shoot(mp.x, mp.y)
 
-func _on_damage_received(amount: int) -> void:
-	health = max(0, health - amount)
-	modulate = Color(1, 0.2, 0.2, 1)
-	await get_tree().create_timer(0.15).timeout
-	if is_instance_valid(self): modulate = Color(1, 1, 1, 1)
-	var hud = get_tree().get_first_node_in_group("hud")
-	if hud: hud.update_health(health)
+func _update_sprite() -> void:
+	if sprite == null: return
+	# 行数 = 方向（Down=0, Left=1, Right=2, Up=3）（RPG Maker 标准顺序）
+	var row := _dir  # Down=0, Left=1, Right=2, Up=3
+	# 列 = 帧 (0=stand, 1=left, 2=right)
+	var col := _anim_frame
+	sprite.region_enabled = true
+	sprite.region_rect = Rect2(col * SHEET_FRAME_W, row * SHEET_FRAME_H, SHEET_FRAME_W, SHEET_FRAME_H)
+
+# 远端玩家调用
+func set_remote_state(data: Dictionary) -> void:
+	var tx := data.get("x", global_position.x)
+	var ty := data.get("y", global_position.y)
+	global_position = global_position.lerp(Vector2(tx, ty), 0.3)
+	var d := data.get("dir", "down")
+	_dir = {"down":0,"left":1,"right":2,"up":3}.get(d, 0)
+	_moving = data.get("moving", false)
+	_update_sprite()
+	if not is_local:
+		var pname := data.get("name", "")
+		if name_label: name_label.text = pname
 
 func set_health(v: int) -> void: health = v
 func set_hunger(v: int) -> void: hunger = v
-func set_weapon(w: String, a: int) -> void: equipped_weapon = w; ammo = a
