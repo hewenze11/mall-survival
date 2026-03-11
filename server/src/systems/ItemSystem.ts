@@ -1,81 +1,37 @@
 import { GameState } from "../schemas/GameState";
 import { Item } from "../schemas/Item";
 import { InventoryItem } from "../schemas/InventoryItem";
-
-// 物资配置
-interface ItemTemplate {
-  type: string;
-  name: string;
-  value: number;
-  weight: number;
-}
-
-const ITEM_TEMPLATES: ItemTemplate[] = [
-  { type: "food",     name: "罐头",   value: 30, weight: 3 },
-  { type: "food",     name: "饼干",   value: 15, weight: 4 },
-  { type: "medicine", name: "急救包", value: 30, weight: 2 },
-  { type: "medicine", name: "绷带",   value: 10, weight: 3 },
-  { type: "weapon",   name: "pistol",  value: 25, weight: 1 },
-  { type: "weapon",   name: "shotgun", value: 60, weight: 1 },
-  { type: "ammo",     name: "手枪弹", value: 30, weight: 4 },
-  { type: "ammo",     name: "霰弹",   value: 10, weight: 2 },
-];
-
-// 每层地图的物资分布点
-const ITEM_SPAWN_REGIONS: Record<number, { x: number; y: number }[]> = {
-  1: [
-    { x: 150, y: 150 },
-    { x: 300, y: 200 },
-    { x: 200, y: 350 },
-    { x: 350, y: 300 },
-    { x: 400, y: 150 },
-    { x: 600, y: 250 },
-    { x: 700, y: 400 },
-    { x: 500, y: 450 },
-  ],
-  2: [
-    { x: 100, y: 200 },
-    { x: 250, y: 150 },
-    { x: 300, y: 300 },
-    { x: 150, y: 350 },
-    { x: 400, y: 250 },
-    { x: 550, y: 350 },
-    { x: 650, y: 200 },
-    { x: 450, y: 450 },
-  ],
-  3: [
-    { x: 200, y: 100 },
-    { x: 300, y: 200 },
-    { x: 150, y: 300 },
-    { x: 350, y: 150 },
-    { x: 250, y: 350 },
-    { x: 500, y: 250 },
-    { x: 600, y: 150 },
-    { x: 450, y: 400 },
-  ],
-};
+import { configLoader, ItemTemplate } from "../config/ConfigLoader";
 
 export class ItemSystem {
   private itemIdCounter = 0;
 
   /**
-   * 游戏开始时在每层生成物资
+   * 游戏开始时在每层生成物资（M7：数据驱动，从 items.json + floors.json 读取）
    */
   spawnInitialItems(state: GameState): void {
+    const itemsCfg = configLoader.getItemsConfig();
+    const templates  = itemsCfg.templates;
+    const minCount   = itemsCfg.spawn_per_floor_min;
+    const maxCount   = itemsCfg.spawn_per_floor_max;
+
     for (let floor = 1; floor <= 3; floor++) {
-      const spawnPoints = ITEM_SPAWN_REGIONS[floor];
-      const count = 5 + Math.floor(Math.random() * 3); // 每层5~7个
+      // 从 floors.json 读取物资生成点（M7 数据驱动）
+      const floorCfg   = configLoader.getFloorConfig(floor);
+      const spawnPoints = floorCfg?.item_spawn_points ?? [{ x: 200, y: 200 }];
+
+      const count = minCount + Math.floor(Math.random() * (maxCount - minCount + 1));
       for (let i = 0; i < count; i++) {
-        const point = spawnPoints[i % spawnPoints.length];
-        const template = this.weightedRandom(ITEM_TEMPLATES);
-        const item = new Item();
-        item.id = `item_${++this.itemIdCounter}`;
-        item.type = template.type;
-        item.name = template.name;
-        item.x = point.x + (Math.random() * 30 - 15);
-        item.y = point.y + (Math.random() * 30 - 15);
-        item.floor = floor;
-        item.value = template.value;
+        const point    = spawnPoints[i % spawnPoints.length];
+        const template = this.weightedRandom(templates);
+        const item     = new Item();
+        item.id        = `item_${++this.itemIdCounter}`;
+        item.type      = template.type;
+        item.name      = template.name;
+        item.x         = point.x + (Math.random() * 30 - 15);
+        item.y         = point.y + (Math.random() * 30 - 15);
+        item.floor     = floor;
+        item.value     = template.value;
         item.isPickedUp = false;
         state.items.set(item.id, item);
       }
@@ -88,7 +44,7 @@ export class ItemSystem {
    */
   handlePickup(playerId: string, itemId: string, state: GameState): boolean {
     const player = state.players.get(playerId);
-    const item = state.items.get(itemId);
+    const item   = state.items.get(itemId);
 
     if (!player || !item) {
       console.log(`[ItemSystem] Pickup failed: player=${!!player}, item=${!!item}`);
@@ -106,17 +62,19 @@ export class ItemSystem {
       return false;
     }
 
-    // 距离验证（100像素内）
-    const dx = player.x - item.x;
-    const dy = player.y - item.y;
+    // 距离验证（从 entities.json 读取 pickup_range，M7 数据驱动）
+    const pickupRange = configLoader.getPlayerConfig().pickup_range ?? 100;
+    const dx   = player.x - item.x;
+    const dy   = player.y - item.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist > 100) {
+    if (dist > pickupRange) {
       console.log(`[ItemSystem] Too far to pick up: dist=${dist.toFixed(1)}`);
       return false;
     }
 
-    // 背包容量检查（最多20格）
-    if (player.inventoryCount >= 20) {
+    // 背包容量检查（从 entities.json 读取 inventory_max，M7 数据驱动）
+    const inventoryMax = configLoader.getPlayerConfig().inventory_max ?? 20;
+    if (player.inventoryCount >= inventoryMax) {
       console.log(`[ItemSystem] Inventory full for player ${playerId}`);
       return false;
     }
@@ -128,11 +86,11 @@ export class ItemSystem {
       existing.quantity++;
       console.log(`[ItemSystem] Stacked ${item.name} x${existing.quantity} for player ${playerId}`);
     } else {
-      const invItem = new InventoryItem();
-      invItem.itemType = item.type;
-      invItem.itemName = item.name;
-      invItem.quantity = 1;
-      invItem.value = item.value;
+      const invItem      = new InventoryItem();
+      invItem.itemType   = item.type;
+      invItem.itemName   = item.name;
+      invItem.quantity   = 1;
+      invItem.value      = item.value;
       player.inventory.set(key, invItem);
       player.inventoryCount++;
       console.log(`[ItemSystem] Added ${item.name} (${item.type}) to player ${playerId}'s inventory. Count: ${player.inventoryCount}`);

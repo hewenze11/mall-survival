@@ -1,0 +1,14 @@
+{
+  "templates": [
+    { "type": "food",     "name": "罐头",   "value": 30, "weight": 3 },
+    { "type": "food",     "name": "饼干",   "value": 15, "weight": 4 },
+    { "type": "medicine", "name": "急救包", "value": 30, "weight": 2 },
+    { "type": "medicine", "name": "绷带",   "value": 10, "weight": 3 },
+    { "type": "weapon",   "name": "pistol",  "value": 30, "weight": 1 },
+    { "type": "weapon",   "name": "shotgun", "value": 60, "weight": 1 },
+    { "type": "ammo",     "name": "手枪弹", "value": 30, "weight": 4 },
+    { "type": "ammo",     "name": "霰弹",   "value": 10, "weight": 2 }
+  ],
+  "spawn_per_floor_min": 5,
+  "spawn_per_floor_max": 7
+}

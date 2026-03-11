@@ -139,10 +139,11 @@ export class WaveSystem {
     zombie.id = `zombie_${this.state.currentWave}_${this.zombiesSpawnedThisWave}_${Date.now()}`;
     zombie.health = zombieConfig.health;
     zombie.speed = zombieConfig.speed;
-    zombie.currentFloor = 1; // M4: always spawn on floor 1
+    zombie.currentFloor = 1; // always spawn on floor 1
 
-    // M4: Spawn at floor-1 entrance (left side of map), with random spread
-    const SPAWN_POINTS = [
+    // M7: Spawn points from floors.json (data-driven)
+    const floor1Cfg    = configLoader.getFloorConfig(1);
+    const SPAWN_POINTS = floor1Cfg?.zombie_spawn_points ?? [
       { x: 50, y: 250 }, { x: 50, y: 300 }, { x: 50, y: 200 },
       { x: 30, y: 270 }, { x: 70, y: 230 },
     ];

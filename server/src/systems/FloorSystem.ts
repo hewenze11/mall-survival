@@ -1,7 +1,7 @@
 /**
- * FloorSystem - 跨层系统（M3完整实现）
+ * FloorSystem - 跨层系统（M7 数据驱动重构）
  * 功能：
- *   - 楼梯触发区域检测（矩形碰撞）
+ *   - 楼梯触发区域检测（从 floors.json 读取矩形区域）
  *   - 实体楼层迁移（zombie/player）
  *   - 广播 floor_change 事件
  *   - 楼层隔离（客户端根据 currentFloor 字段过滤）
@@ -9,8 +9,7 @@
 
 import { Room } from "colyseus";
 import { GameState } from "../schemas/GameState";
-import { Player } from "../schemas/Player";
-import { Zombie } from "../schemas/Zombie";
+import { configLoader, FloorConfig } from "../config/ConfigLoader";
 
 export interface FloorData {
   floorId: number;
@@ -28,31 +27,6 @@ export interface EntityLocation {
   y: number;
 }
 
-// 每层楼的楼梯触发区（矩形范围）
-// key: floorId (上行) 或 `${floorId}_down` (下行)
-interface StairZone {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  leadsTo: number;
-  direction: "up" | "down";
-}
-
-const STAIR_ZONES: Record<string, StairZone> = {
-  "1":      { x: 450, y: 450, width: 100, height: 100, leadsTo: 2, direction: "up" },   // 1楼 → 2楼
-  "2":      { x: 450, y: 450, width: 100, height: 100, leadsTo: 3, direction: "up" },   // 2楼 → 3楼
-  "2_down": { x: 50,  y: 50,  width: 100, height: 100, leadsTo: 1, direction: "down" }, // 2楼 → 1楼
-  "3_down": { x: 50,  y: 50,  width: 100, height: 100, leadsTo: 2, direction: "down" }, // 3楼 → 2楼
-};
-
-// 各楼层楼梯出口坐标（抵达该楼层时的生成点）
-const STAIR_EXITS: Record<number, { x: number; y: number }> = {
-  1: { x: 100, y: 100 }, // 从2楼下来到1楼的出口
-  2: { x: 100, y: 100 }, // 从1楼上来到2楼的出口
-  3: { x: 100, y: 100 }, // 从2楼上来到3楼的出口
-};
-
 export interface FloorChangeEvent {
   entityId: string;
   entityType: "zombie" | "player";
@@ -63,113 +37,45 @@ export interface FloorChangeEvent {
 }
 
 export class FloorSystem {
-  private floors: Map<number, FloorData> = new Map();
   private entityLocations: Map<string, EntityLocation> = new Map();
   private room: Room | null = null;
 
   constructor() {
-    this.initDefaultFloors();
-    console.log("[FloorSystem] Initialized with", this.floors.size, "floors");
+    // FloorSystem no longer initialises hard-coded floor data.
+    // All floor info is loaded on-demand from floors.json via configLoader.
+    console.log("[FloorSystem] Initialized (data-driven via floors.json)");
   }
 
-  /**
-   * 绑定 Room 实例，用于广播事件
-   */
+  /** 绑定 Room 实例，用于广播事件 */
   setRoom(room: Room): void {
     this.room = room;
   }
 
-  private initDefaultFloors(): void {
-    const defaultFloors: FloorData[] = [
-      {
-        floorId: 1,
-        name: "1F - 商场入口",
-        width: 1600,
-        height: 900,
-        spawnPoints: [
-          { x: 800, y: 450 },
-          { x: 400, y: 300 },
-          { x: 1200, y: 600 },
-        ],
-        exitPoints: [
-          { x: 500, y: 500, targetFloor: 2 },
-        ],
-      },
-      {
-        floorId: 2,
-        name: "2F - 商场主区",
-        width: 1600,
-        height: 900,
-        spawnPoints: [
-          { x: 800, y: 450 },
-        ],
-        exitPoints: [
-          { x: 100, y: 100, targetFloor: 1 },
-          { x: 500, y: 500, targetFloor: 3 },
-        ],
-      },
-      {
-        floorId: 3,
-        name: "3F - 顶层/屋顶",
-        width: 1600,
-        height: 900,
-        spawnPoints: [
-          { x: 800, y: 450 },
-        ],
-        exitPoints: [
-          { x: 100, y: 100, targetFloor: 2 },
-        ],
-      },
-    ];
-
-    for (const floor of defaultFloors) {
-      this.floors.set(floor.floorId, floor);
-    }
-  }
-
   /**
-   * 检测实体是否在楼梯触发区域内
+   * 检测实体是否在楼梯触发区域内（M7：从 floors.json 读取）
    * @returns { triggered: boolean, targetFloor: number }
    */
   isInStairZone(x: number, y: number, floor: number): { triggered: boolean; targetFloor: number } {
-    // 检测上行楼梯（key = floor number）
-    const upKey = String(floor);
-    const upZone = STAIR_ZONES[upKey];
-    if (upZone) {
-      if (
-        x >= upZone.x &&
-        x <= upZone.x + upZone.width &&
-        y >= upZone.y &&
-        y <= upZone.y + upZone.height
-      ) {
-        return { triggered: true, targetFloor: upZone.leadsTo };
-      }
+    const floorCfg = configLoader.getFloorConfig(floor);
+    if (!floorCfg) return { triggered: false, targetFloor: floor };
+
+    // 检测上行楼梯
+    const up = floorCfg.stair_up;
+    if (up && x >= up.x && x <= up.x + up.width && y >= up.y && y <= up.y + up.height) {
+      return { triggered: true, targetFloor: up.leads_to };
     }
 
-    // 检测下行楼梯（key = `${floor}_down`）
-    const downKey = `${floor}_down`;
-    const downZone = STAIR_ZONES[downKey];
-    if (downZone) {
-      if (
-        x >= downZone.x &&
-        x <= downZone.x + downZone.width &&
-        y >= downZone.y &&
-        y <= downZone.y + downZone.height
-      ) {
-        return { triggered: true, targetFloor: downZone.leadsTo };
-      }
+    // 检测下行楼梯
+    const down = floorCfg.stair_down;
+    if (down && x >= down.x && x <= down.x + down.width && y >= down.y && y <= down.y + down.height) {
+      return { triggered: true, targetFloor: down.leads_to };
     }
 
     return { triggered: false, targetFloor: floor };
   }
 
   /**
-   * 迁移实体到另一楼层（完整实现）
-   * 1. 从 fromFloor 的实体列表移除
-   * 2. 获取 toFloor 的楼梯出口坐标
-   * 3. 更新实体的 currentFloor、x、y
-   * 4. 加入 toFloor 的实体列表
-   * 5. 广播 floor_change 消息给所有客户端
+   * 迁移实体到另一楼层（M7：出口坐标从 floors.json 读取）
    */
   migrateEntity(
     entityId: string,
@@ -177,38 +83,39 @@ export class FloorSystem {
     toFloor: number,
     state: GameState
   ): void {
-    // 验证目标楼层存在
-    const targetFloorData = this.floors.get(toFloor);
-    if (!targetFloorData) {
-      console.warn(`[FloorSystem] Target floor ${toFloor} not found`);
+    const targetFloorCfg = configLoader.getFloorConfig(toFloor);
+    if (!targetFloorCfg) {
+      console.warn(`[FloorSystem] Target floor ${toFloor} not found in floors.json`);
       return;
     }
 
-    // 获取出口坐标
-    const exitPoint = STAIR_EXITS[toFloor] ?? targetFloorData.spawnPoints[0];
-    const newX = exitPoint.x;
-    const newY = exitPoint.y;
+    // 确定出口方向（上行 → from_below，下行 → from_above）
+    const goingUp = toFloor > fromFloor;
+    const exits   = targetFloorCfg.stair_exits;
+    const exitPt  = goingUp
+      ? (exits.from_below ?? { x: 100, y: 100 })
+      : (exits.from_above ?? { x: 100, y: 100 });
 
-    // 确定实体类型并更新 Schema 状态
+    const newX = exitPt.x;
+    const newY = exitPt.y;
+
     let entityType: "zombie" | "player" = "zombie";
 
-    // 尝试更新 zombie
     const zombie = state.zombies.get(entityId);
     if (zombie) {
-      entityType = "zombie";
+      entityType         = "zombie";
       zombie.currentFloor = toFloor;
-      zombie.x = newX;
-      zombie.y = newY;
+      zombie.x           = newX;
+      zombie.y           = newY;
       console.log(`[FloorSystem] Zombie ${entityId} migrated: floor ${fromFloor} → ${toFloor} at (${newX}, ${newY})`);
     }
 
-    // 尝试更新 player
     const player = state.players.get(entityId);
     if (player) {
-      entityType = "player";
+      entityType          = "player";
       player.currentFloor = toFloor;
-      player.x = newX;
-      player.y = newY;
+      player.x            = newX;
+      player.y            = newY;
       console.log(`[FloorSystem] Player ${entityId} migrated: floor ${fromFloor} → ${toFloor} at (${newX}, ${newY})`);
     }
 
@@ -216,22 +123,13 @@ export class FloorSystem {
     const loc = this.entityLocations.get(entityId);
     if (loc) {
       loc.floor = toFloor;
-      loc.x = newX;
-      loc.y = newY;
+      loc.x     = newX;
+      loc.y     = newY;
     } else {
       this.entityLocations.set(entityId, { entityId, floor: toFloor, x: newX, y: newY });
     }
 
-    // 广播 floor_change 事件给所有客户端
-    const event: FloorChangeEvent = {
-      entityId,
-      entityType,
-      fromFloor,
-      toFloor,
-      newX,
-      newY,
-    };
-
+    const event: FloorChangeEvent = { entityId, entityType, fromFloor, toFloor, newX, newY };
     if (this.room) {
       this.room.broadcast("floor_change", event);
       console.log(`[FloorSystem] Broadcasted floor_change: ${JSON.stringify(event)}`);
@@ -240,65 +138,71 @@ export class FloorSystem {
     }
   }
 
-  /**
-   * 获取楼层数据
-   */
+  // ── Legacy FloorData helpers (kept for backward-compat with GameRoom) ────
+
   getFloor(floorId: number): FloorData | undefined {
-    return this.floors.get(floorId);
+    const cfg = configLoader.getFloorConfig(floorId);
+    if (!cfg) return undefined;
+    return this._toFloorData(cfg);
   }
 
-  /**
-   * 获取所有楼层
-   */
   getAllFloors(): FloorData[] {
-    return Array.from(this.floors.values());
+    return configLoader.getFloorsConfig().floors.map(f => this._toFloorData(f));
   }
 
-  /**
-   * 注册实体位置
-   */
+  private _toFloorData(cfg: FloorConfig): FloorData {
+    const exitPoints: { x: number; y: number; targetFloor: number }[] = [];
+    if (cfg.stair_up)   exitPoints.push({ x: cfg.stair_up.x,   y: cfg.stair_up.y,   targetFloor: cfg.stair_up.leads_to });
+    if (cfg.stair_down) exitPoints.push({ x: cfg.stair_down.x, y: cfg.stair_down.y, targetFloor: cfg.stair_down.leads_to });
+    return {
+      floorId:     cfg.id,
+      name:        cfg.name,
+      width:       cfg.width,
+      height:      cfg.height,
+      spawnPoints: cfg.zombie_spawn_points,
+      exitPoints,
+    };
+  }
+
+  // ── Entity location tracking ─────────────────────────────────────────────
+
   registerEntity(entityId: string, floor: number, x: number, y: number): void {
     this.entityLocations.set(entityId, { entityId, floor, x, y });
   }
 
-  /**
-   * 更新实体位置
-   */
   updateEntityLocation(entityId: string, x: number, y: number): void {
     const loc = this.entityLocations.get(entityId);
-    if (loc) {
-      loc.x = x;
-      loc.y = y;
-    }
+    if (loc) { loc.x = x; loc.y = y; }
   }
 
-  /**
-   * 获取特定楼层的实体
-   */
   getEntitiesOnFloor(floorId: number): EntityLocation[] {
-    return Array.from(this.entityLocations.values()).filter(
-      (loc) => loc.floor === floorId
-    );
+    return Array.from(this.entityLocations.values()).filter(loc => loc.floor === floorId);
   }
 
-  /**
-   * 移除实体
-   */
   removeEntity(entityId: string): void {
     this.entityLocations.delete(entityId);
   }
 
   /**
-   * 获取楼梯触发区定义（用于调试/客户端渲染）
+   * 获取楼梯触发区（供调试/客户端渲染，M7：从 floors.json 动态构建）
    */
-  getStairZones(): Record<string, StairZone> {
-    return STAIR_ZONES;
+  getStairZones(): Record<string, any> {
+    const result: Record<string, any> = {};
+    configLoader.getFloorsConfig().floors.forEach(f => {
+      if (f.stair_up)   result[String(f.id)]          = { ...f.stair_up,   direction: "up" };
+      if (f.stair_down) result[`${f.id}_down`]         = { ...f.stair_down, direction: "down" };
+    });
+    return result;
   }
 
-  /**
-   * 获取楼梯出口定义
-   */
   getStairExits(): Record<number, { x: number; y: number }> {
-    return STAIR_EXITS;
+    const result: Record<number, { x: number; y: number }> = {};
+    configLoader.getFloorsConfig().floors.forEach(f => {
+      const exits = f.stair_exits;
+      // Use from_below as canonical exit for each floor (arrival from lower floor)
+      const pt = exits.from_below ?? exits.from_above;
+      if (pt) result[f.id] = pt;
+    });
+    return result;
   }
 }

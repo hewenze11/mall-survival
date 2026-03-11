@@ -1,0 +1,5 @@
+{
+  "none":    { "damage": 10, "ammo_per_shot": 0, "range": 200, "spread": 0,   "pellets": 1, "display_name": "徒手" },
+  "pistol":  { "damage": 30, "ammo_per_shot": 1, "range": 300, "spread": 0,   "pellets": 1, "display_name": "手枪" },
+  "shotgun": { "damage": 60, "ammo_per_shot": 2, "range": 200, "spread": 0.3, "pellets": 3, "display_name": "霰弹枪" }
+}

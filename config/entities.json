@@ -3,12 +3,15 @@
     "health": 100,
     "speed": 150,
     "hunger_max": 100,
-    "hunger_decay_per_wave": 15
+    "hunger_decay_per_wave": 15,
+    "pickup_range": 100,
+    "inventory_max": 20
   },
   "zombie": {
     "health": 80,
     "speed": 170,
     "damage": 15,
-    "attack_rate": 1.0
+    "attack_rate": 1.0,
+    "attack_range": 50
   }
 }

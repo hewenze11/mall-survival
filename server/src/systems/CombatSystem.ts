@@ -1,22 +1,16 @@
 /**
- * CombatSystem - M6 完整战斗系统
+ * CombatSystem - M6 完整战斗系统（M7 数据驱动重构）
  * 功能：
- *   - 玩家射击：弹药消耗、武器伤害差异、霰弹枪散射
+ *   - 玩家射击：弹药消耗、武器伤害差异、霰弹枪散射（参数从 weapons.json 读取）
  *   - 丧尸受击：血量扣减、死亡移除
  *   - 丧尸 AI 追击：每 tick 向最近同楼层玩家移动
- *   - 丧尸近战攻击：进入 50px 范围按频率造成伤害
+ *   - 丧尸近战攻击：进入 attack_range 范围按 attack_rate 频率造成伤害
  *   - 玩家死亡：health=0 → isAlive=false，广播 player_dead
  */
 
 import { GameState } from '../schemas/GameState';
 import { Room } from 'colyseus';
-
-// 武器配置表
-const WEAPON_CONFIG: Record<string, { damage: number; ammoPerShot: number; range: number; spread: number; pellets: number }> = {
-  none:    { damage: 10, ammoPerShot: 0, range: 200, spread: 0,   pellets: 1 },
-  pistol:  { damage: 30, ammoPerShot: 1, range: 300, spread: 0,   pellets: 1 },
-  shotgun: { damage: 60, ammoPerShot: 2, range: 200, spread: 0.3, pellets: 3 },
-};
+import { configLoader } from '../config/ConfigLoader';
 
 export class CombatSystem {
   private room: Room;
@@ -39,7 +33,17 @@ export class CombatSystem {
     if (!player || !player.isAlive) return;
 
     const weaponKey = player.equippedWeapon || 'none';
-    const weapon = WEAPON_CONFIG[weaponKey] ?? WEAPON_CONFIG['none'];
+    // ── 从 weapons.json 读取武器配置（M7 数据驱动）
+    const weaponCfg = (configLoader.getWeaponConfig(weaponKey) ?? configLoader.getWeaponConfig('none')) as {
+      damage: number; ammo_per_shot: number; range: number; spread: number; pellets: number;
+    };
+    const weapon = {
+      damage:      weaponCfg.damage,
+      ammoPerShot: weaponCfg.ammo_per_shot,
+      range:       weaponCfg.range,
+      spread:      weaponCfg.spread,
+      pellets:     weaponCfg.pellets,
+    };
 
     // ── 弹药检查（none 武器无需弹药）
     if (weapon.ammoPerShot > 0) {
@@ -137,10 +141,13 @@ export class CombatSystem {
    * @param state    当前游戏状态
    */
   updateZombieAI(deltaMs: number, state: GameState): void {
-    const ATTACK_RANGE = 50; // 近战攻击范围（px）
+    // ── 从 entities.json 读取丧尸参数（M7 数据驱动）
+    const zombieCfg = configLoader.getZombieConfig();
+    const ATTACK_RANGE = zombieCfg.attack_range ?? 50;
+    const attackIntervalMs = zombieCfg.attack_rate > 0 ? Math.round(1000 / zombieCfg.attack_rate) : 1000;
 
     state.zombies.forEach((zombie, zombieId) => {
-      if (zombie.health <= 0) return; // 已死亡（理论上不该出现在 map 里，但保险起见）
+      if (zombie.health <= 0) return;
 
       // ── 寻找同楼层最近存活玩家
       interface PlayerSnapshot { id: string; x: number; y: number }
@@ -157,10 +164,9 @@ export class CombatSystem {
         }
       });
 
-      if (closestPlayer === null) return; // 同楼层无存活玩家，暂停行动
+      if (closestPlayer === null) return;
       const target = closestPlayer as PlayerSnapshot;
 
-      // 更新追击目标
       zombie.targetPlayerId = target.id;
 
       if (closestDist > ATTACK_RANGE) {
@@ -173,12 +179,12 @@ export class CombatSystem {
           zombie.y += (ddy / ddist) * zombie.speed * (deltaMs / 1000);
         }
       } else {
-        // ── 近战攻击（attack_rate = 1.0 → 每秒 1 次）
+        // ── 近战攻击（由 attack_rate 决定间隔）
         const lastAttack = this.zombieAttackTimers.get(zombieId) ?? 0;
         const now = Date.now();
-        if (now - lastAttack >= 1000) {
+        if (now - lastAttack >= attackIntervalMs) {
           this.zombieAttackTimers.set(zombieId, now);
-          this.applyDamageToPlayer(target.id, 15, state);
+          this.applyDamageToPlayer(target.id, zombieCfg.damage, state);
         }
       }
     });
