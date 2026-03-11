@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  game-server:
+    image: ${REGISTRY:-104.64.211.27:5000}/mall-survival-server:latest
+    container_name: mall-survival-game
+    restart: unless-stopped
+    ports:
+      - "2567:2567"
+    environment:
+      - NODE_ENV=production
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

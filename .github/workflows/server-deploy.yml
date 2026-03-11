@@ -1,0 +1,38 @@
+name: Server Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'server/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ secrets.REGISTRY_HOST }}/mall-survival-server:latest ./server
+          docker tag ${{ secrets.REGISTRY_HOST }}/mall-survival-server:latest ${{ secrets.REGISTRY_HOST }}/mall-survival-server:${{ github.sha }}
+
+      - name: Push to private registry
+        run: |
+          docker push ${{ secrets.REGISTRY_HOST }}/mall-survival-server:latest
+          docker push ${{ secrets.REGISTRY_HOST }}/mall-survival-server:${{ github.sha }}
+
+      - name: Deploy to game server (rolling update)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_IP1 }}
+          username: root
+          password: ${{ secrets.SSH_PASSWORD }}
+          script: |
+            bash /opt/game/update.sh

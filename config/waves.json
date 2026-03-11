@@ -1,0 +1,10 @@
+{
+  "prep_time_seconds": 300,
+  "waves": [
+    {"wave": 1, "zombie_count": 10, "spawn_interval": 3.0},
+    {"wave": 2, "zombie_count": 20, "spawn_interval": 2.5},
+    {"wave": 3, "zombie_count": 35, "spawn_interval": 2.0},
+    {"wave": 4, "zombie_count": 50, "spawn_interval": 1.5},
+    {"wave": 5, "zombie_count": 70, "spawn_interval": 1.2}
+  ]
+}

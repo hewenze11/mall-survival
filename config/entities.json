@@ -1,0 +1,14 @@
+{
+  "player": {
+    "health": 100,
+    "speed": 150,
+    "hunger_max": 100,
+    "hunger_decay_per_wave": 15
+  },
+  "zombie": {
+    "health": 80,
+    "speed": 170,
+    "damage": 15,
+    "attack_rate": 1.0
+  }
+}
