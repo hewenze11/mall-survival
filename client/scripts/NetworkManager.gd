@@ -199,3 +199,18 @@ func _process_state(s: Dictionary) -> void:
 func _send_msg(data: Dictionary) -> void:
 	if _ws == null or _ws.get_ready_state() != WebSocketPeer.STATE_OPEN: return
 	_ws.send(JSON.stringify(data).to_utf8_buffer(), WebSocketPeer.WRITE_MODE_TEXT)
+
+func connect_to_room_id(server_url: String, room_id: String, player_name: String) -> void:
+	print("[NetworkManager] Joining specific room: %s" % room_id)
+	_server_url = server_url
+	local_player_name = player_name
+	_state = ConnectionState.CONNECTING
+	# 用 joinById endpoint
+	var http_base = server_url.replace("ws://","http://").replace("wss://","https://")
+	var url = "%s/matchmake/joinById/%s" % [http_base, room_id]
+	var http = HTTPRequest.new()
+	add_child(http)
+	http.request_completed.connect(func(res, code, _h, body):
+		_on_matchmake_done(res, code, body, http))
+	http.request(url, ["Content-Type: application/json"],
+		HTTPClient.METHOD_POST, JSON.stringify({"playerName": player_name}))

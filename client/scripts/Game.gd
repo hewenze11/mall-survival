@@ -97,6 +97,10 @@ func _process(delta: float) -> void:
 		if hud:
 			hud.update_phase(game_phase, prep_countdown)
 	
+	# Camera follows local player
+	if local_player and is_instance_valid(local_player):
+		camera.global_position = local_player.global_position
+
 	# Ping display update
 	_ping_timer += delta
 	if _ping_timer >= 2.0:
@@ -115,8 +119,8 @@ func _spawn_local_player() -> void:
 	local_player.global_position = Vector2(640, 360)  # Center of map
 	
 	# Camera follows local player
-	camera.reparent(local_player)
-	camera.position = Vector2.ZERO
+	# camera stays in Game scene, follows player in _process
+	camera.global_position = local_player.global_position
 	
 	print("[Game] Local player spawned at %s" % local_player.global_position)
 
