@@ -49,40 +49,33 @@ async function main() {
     .enableRealtimeListing();
 
   // Room list endpoint
-  app.get("/rooms", async (req, res) => {
+  app.get("/rooms", (req, res) => {
     try {
-      // Use Colyseus driver to query available rooms
-      const driver = (gameServer as any).driver;
-      if (driver && typeof driver.find === "function") {
-        const rooms = await driver.find({ name: "game" });
-        const roomList = rooms.map((r: any) => ({
-          roomId: r.roomId,
-          clients: r.clients,
-          maxClients: r.maxClients,
-          locked: r.locked,
-          phase: r.metadata?.phase || "WAITING",
-        }));
-        res.json({ rooms: roomList, total: roomList.length });
-      } else {
-        // Fallback: use matchmaker
-        const matchMaker = (gameServer as any).matchMaker;
-        if (matchMaker && typeof matchMaker.query === "function") {
-          const rooms = await matchMaker.query({ name: "game" });
-          const roomList = rooms.map((r: any) => ({
-            roomId: r.roomId,
-            clients: r.clients,
-            maxClients: r.maxClients || 4,
-            locked: r.locked || false,
-            phase: r.metadata?.phase || "WAITING",
-          }));
-          res.json({ rooms: roomList, total: roomList.length });
-        } else {
-          res.json({ rooms: [], total: 0, note: "Room listing not available" });
-        }
+      const allRooms: any[] = [];
+      // Colyseus v0.15 stores rooms in transport._server or directly accessible
+      const transport = (gameServer as any).transport;
+      const roomsMap = (gameServer as any)._rooms
+        || (transport && transport._rooms)
+        || null;
+
+      if (roomsMap instanceof Map) {
+        roomsMap.forEach((room: any) => {
+          if (room.roomName === "game" || room.roomId) {
+            allRooms.push({
+              roomId: room.roomId,
+              clients: room.clients ? room.clients.length : 0,
+              maxClients: room.maxClients || 4,
+              locked: room.locked || false,
+              phase: room.state?.phase || room.metadata?.phase || "WAITING",
+              wave: room.state?.currentWave || 1,
+            });
+          }
+        });
       }
+      res.json({ rooms: allRooms, total: allRooms.length });
     } catch (e: any) {
       console.error("[/rooms] Error:", e.message);
-      res.json({ rooms: [], total: 0, error: e.message });
+      res.json({ rooms: [], total: 0 });
     }
   });
 
