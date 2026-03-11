@@ -21,8 +21,8 @@ func update_wave(w: int) -> void:
 	wave_label.text = "波次 %d" % w
 
 func update_phase(p: String, t: float) -> void:
-	var mins := int(t) / 60
-	var secs := int(t) % 60
+	var mins = int(t) / 60
+	var secs = int(t) % 60
 	match p:
 		"PREP":  phase_label.text = "⏱ 备战 %02d:%02d" % [mins, secs]
 		"WAVE":  phase_label.text = "⚔ 战斗中"
@@ -30,7 +30,7 @@ func update_phase(p: String, t: float) -> void:
 		_:       phase_label.text = p
 
 func update_weapon(w: String, ammo: int) -> void:
-	var wn := {"none":"徒手","pistol":"手枪","shotgun":"霰弹枪"}.get(w, w)
+	var wn = {"none":"徒手","pistol":"手枪","shotgun":"霰弹枪"}.get(w, w)
 	weapon_label.text = "🔫 %s  ×%d" % [wn, ammo]
 
 func update_floor(f: int) -> void:

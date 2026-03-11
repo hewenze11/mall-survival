@@ -39,7 +39,7 @@ jobs:
         env:
           DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
         run: |
-          apt-get install -y sshpass rsync 2>/dev/null | tail -1
+          apt-get update -qq && apt-get install -y -qq sshpass rsync
           sshpass -p "$DEPLOY_PASSWORD" rsync -avz --delete \
             -e "ssh -o StrictHostKeyChecking=no" \
             client/build/web/ \

@@ -46,7 +46,7 @@ func _build_room_list(r: int, code: int, body: PackedByteArray) -> void:
 			var btn := Button.new()
 			btn.text = "🏢 房间 %s  [%d/%d]  %s" % [rid.left(6), c, m, _phase_zh(phase)]
 			btn.custom_minimum_size = Vector2(0, 36)
-			var cap := rid
+			var cap: String = rid
 			btn.pressed.connect(func(): _join_specific(cap))
 			room_list.add_child(btn)
 
