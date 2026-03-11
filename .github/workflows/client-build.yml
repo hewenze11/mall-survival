@@ -2,46 +2,43 @@ name: Client Build
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - 'client/**'
 
 jobs:
-  build-client:
+  build-windows:
     runs-on: ubuntu-latest
     container:
       image: barichello/godot-ci:4.2
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup export templates
         run: |
           mkdir -p ~/.local/share/godot/export_templates/4.2.stable
-          mv /root/.local/share/godot/export_templates/4.2.stable ~/.local/share/godot/export_templates/4.2.stable
+          mv /root/.local/share/godot/export_templates/4.2.stable/* ~/.local/share/godot/export_templates/4.2.stable/ 2>/dev/null || true
 
-      - name: Build Windows export
+      - name: Export Windows
         run: |
           mkdir -p build/windows
           cd client
-          godot --headless --export-release "Windows Desktop" ../build/windows/mall-survival.exe
+          godot --headless --export-release "Windows Desktop" ../build/windows/MallSurvival.exe
 
-      - name: Build Linux export
+      - name: Export Linux
         run: |
           mkdir -p build/linux
           cd client
-          godot --headless --export-release "Linux/X11" ../build/linux/mall-survival.x86_64
+          godot --headless --export-release "Linux/X11" ../build/linux/MallSurvival.x86_64
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mall-survival-windows-${{ github.sha }}
+          name: MallSurvival-Windows-${{ github.sha }}
           path: build/windows/
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mall-survival-linux-${{ github.sha }}
+          name: MallSurvival-Linux-${{ github.sha }}
           path: build/linux/
