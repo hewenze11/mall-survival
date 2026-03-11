@@ -1,11 +1,28 @@
 import * as fs from "fs";
 import * as path from "path";
 
-const CONFIG_DIR = path.resolve(__dirname, "../../../config");
+// Try multiple config paths for both Docker and local dev
+const CONFIG_PATHS = [
+  "/app/config",                                    // Docker container
+  path.join(__dirname, "../../../config"),          // local dev: server/dist/config/ → root
+  path.join(__dirname, "../../config"),             // local dev: server/src/config/ → root
+  path.join(process.cwd(), "config"),               // CWD fallback
+];
+
+const CONFIG_DIR =
+  CONFIG_PATHS.find((p) => fs.existsSync(path.join(p, "entities.json"))) ||
+  CONFIG_PATHS[0];
+
+console.log(`[ConfigLoader] Using config dir: ${CONFIG_DIR}`);
 
 function loadJson(filename: string): any {
   const filePath = path.join(CONFIG_DIR, filename);
-  return JSON.parse(fs.readFileSync(filePath, "utf-8"));
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf-8"));
+  } catch (e) {
+    console.error(`[ConfigLoader] Failed to load ${filePath}: ${e}`);
+    throw new Error(`Cannot load config: ${filePath}`);
+  }
 }
 
 // ── Typed interfaces ────────────────────────────────────────────────────────
