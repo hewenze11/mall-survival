@@ -5,6 +5,22 @@ extends Node2D
 
 const PICKUP_DISTANCE: float = 100.0
 
+# 物品图标贴图映射（像素风格 PNG）
+const ICON_TEXTURES: Dictionary = {
+	"food_can":         "res://assets/icons/food_can.png",
+	"food_biscuit":     "res://assets/icons/food_biscuit.png",
+	"food":             "res://assets/icons/food_can.png",
+	"medicine_kit":     "res://assets/icons/medicine_kit.png",
+	"medicine_bandage": "res://assets/icons/medicine_bandage.png",
+	"medicine":         "res://assets/icons/medicine_kit.png",
+	"weapon_pistol":    "res://assets/icons/weapon_pistol.png",
+	"weapon_shotgun":   "res://assets/icons/weapon_shotgun.png",
+	"weapon":           "res://assets/icons/weapon_pistol.png",
+	"ammo_pistol":      "res://assets/icons/ammo_pistol.png",
+	"ammo_shotgun":     "res://assets/icons/ammo_shotgun.png",
+	"ammo":             "res://assets/icons/ammo_pistol.png",
+}
+
 var item_id: String = ""
 var item_type: String = ""
 var item_name: String = ""
@@ -14,7 +30,7 @@ var _prompt_visible: bool = false
 
 @onready var name_label: Label = $name_label
 @onready var prompt_label: Label = $prompt_label
-@onready var icon_label: Label = $icon_label
+@onready var icon_sprite: Sprite2D = $icon_sprite
 
 
 func _ready() -> void:
@@ -32,8 +48,18 @@ func initialize(id: String, type: String, name: String, x: float, y: float, floo
 	if name_label:
 		name_label.text = name
 	
-	if icon_label:
-		icon_label.text = _get_icon(type)
+	# 加载对应的像素图标
+	if icon_sprite:
+		var tex_path = ICON_TEXTURES.get(type, "")
+		if tex_path == "":
+			# 尝试前缀匹配（如 "food_xxx" → "food"）
+			for key in ICON_TEXTURES:
+				if type.begins_with(key):
+					tex_path = ICON_TEXTURES[key]
+					break
+		if tex_path != "":
+			icon_sprite.texture = load(tex_path)
+			icon_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 
 func _process(_delta: float) -> void:
@@ -57,12 +83,3 @@ func _process(_delta: float) -> void:
 	# E 键拾取
 	if in_range and Input.is_action_just_pressed("interact"):
 		NetworkManager.send_pickup(item_id)
-
-
-func _get_icon(type: String) -> String:
-	match type:
-		"food":     return "🍞"
-		"medicine": return "💊"
-		"weapon":   return "🔫"
-		"ammo":     return "🔴"
-	return "📦"

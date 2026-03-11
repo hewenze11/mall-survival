@@ -7,6 +7,31 @@ const PLAYER_SCENE = preload("res://scenes/Player.tscn")
 const REMOTE_PLAYER_SCENE_PATH = "res://scenes/Player.tscn"  # Reuse same visual, different script
 const ITEM_SPRITE_SCENE = preload("res://scenes/ItemSprite.tscn")
 
+# ============================================================
+# Art Assets - Pixel Art Resources
+# ============================================================
+const PLAYER_TEX_DOWN  = preload("res://assets/characters/player_down.png")
+const PLAYER_TEX_UP    = preload("res://assets/characters/player_up.png")
+const PLAYER_TEX_LEFT  = preload("res://assets/characters/player_left.png")
+const PLAYER_TEX_RIGHT = preload("res://assets/characters/player_right.png")
+const ZOMBIE_TEX       = preload("res://assets/characters/zombie.png")
+const FLOOR_TEX        = preload("res://assets/tileset/floor.png")
+const WALL_TEX         = preload("res://assets/tileset/wall.png")
+const MUZZLE_FLASH_TEX = preload("res://assets/fx/muzzle_flash.png")
+const BLOOD_HIT_TEX    = preload("res://assets/fx/blood_hit.png")
+
+# Item icon textures (keyed by item type)
+const ITEM_ICONS = {
+	"food_can":          "res://assets/icons/food_can.png",
+	"food_biscuit":      "res://assets/icons/food_biscuit.png",
+	"medicine_kit":      "res://assets/icons/medicine_kit.png",
+	"medicine_bandage":  "res://assets/icons/medicine_bandage.png",
+	"weapon_pistol":     "res://assets/icons/weapon_pistol.png",
+	"weapon_shotgun":    "res://assets/icons/weapon_shotgun.png",
+	"ammo_pistol":       "res://assets/icons/ammo_pistol.png",
+	"ammo_shotgun":      "res://assets/icons/ammo_shotgun.png",
+}
+
 var local_player: CharacterBody2D = null
 var remote_players: Dictionary = {}  # player_id -> RemotePlayer node
 var item_sprites: Dictionary = {}    # item_id -> ItemSprite node
@@ -290,32 +315,54 @@ func _setup_damage_overlay() -> void:
 	canvas.add_child(_damage_overlay)
 
 
-# 收到 shoot_fx：在世界坐标绘制枪线特效（Line2D）
+# 收到 shoot_fx：在世界坐标绘制枪线特效（Line2D）+ 枪口火焰 Sprite
 func _on_shoot_fx(data: Dictionary) -> void:
-	var line = Line2D.new()
-	line.width = 2.0
-	line.default_color = Color.YELLOW
-	
 	var from = Vector2(data.get("fromX", 0.0), data.get("fromY", 0.0))
 	var dir = Vector2(data.get("dirX", 1.0), data.get("dirY", 0.0))
 	var to = from + dir * 300.0
 	
+	# 弹道线
+	var line = Line2D.new()
+	line.width = 2.0
+	line.default_color = Color.YELLOW
 	line.add_point(from)
 	line.add_point(to)
 	add_child(line)
+	
+	# 枪口火焰 Sprite（使用真实像素特效贴图）
+	var flash = Sprite2D.new()
+	flash.texture = MUZZLE_FLASH_TEX
+	flash.position = from + dir * 20.0
+	flash.rotation = dir.angle()
+	flash.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	add_child(flash)
 	
 	# 0.1 秒后自动销毁
 	await get_tree().create_timer(0.1).timeout
 	if is_instance_valid(line):
 		line.queue_free()
+	if is_instance_valid(flash):
+		flash.queue_free()
 
 
-# 收到 player_hit：本地玩家受击时屏幕闪红
+# 收到 player_hit：本地玩家受击时屏幕闪红 + 血迹特效
 func _on_player_hit(data: Dictionary) -> void:
 	var pid = data.get("playerId", "")
 	if pid != NetworkManager.my_session_id:
+		# 非本地玩家受击：在受击位置显示血迹 Sprite
+		var hit_x = data.get("x", 0.0)
+		var hit_y = data.get("y", 0.0)
+		var blood = Sprite2D.new()
+		blood.texture = BLOOD_HIT_TEX
+		blood.position = Vector2(hit_x, hit_y)
+		blood.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		add_child(blood)
+		await get_tree().create_timer(0.4).timeout
+		if is_instance_valid(blood):
+			blood.queue_free()
 		return
 	
+	# 本地玩家受击：全屏红闪
 	if _damage_overlay == null:
 		return
 	

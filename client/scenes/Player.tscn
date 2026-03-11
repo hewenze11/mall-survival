@@ -1,28 +1,30 @@
-[gd_scene load_steps=3 format=3 uid="uid://player_scene"]
+[gd_scene load_steps=4 format=3 uid="uid://player_scene"]
 
 [ext_resource type="Script" path="res://scripts/Player.gd" id="1_player"]
+[ext_resource type="Texture2D" path="res://assets/characters/player_down.png" id="2_player_tex"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_1"]
-radius = 16.0
+radius = 14.0
 
 [node name="Player" type="CharacterBody2D"]
 script = ExtResource("1_player")
 
-[node name="Body" type="Polygon2D" parent="."]
-polygon = PackedVector2Array(-12, -16, 12, -16, 16, 0, 12, 16, -12, 16, -16, 0)
-color = Color(0.2, 0.6, 1, 1)
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("2_player_tex")
+texture_filter = 1
+scale = Vector2(1.5, 1.5)
 
 [node name="DirectionIndicator" type="Line2D" parent="."]
-points = PackedVector2Array(0, 0, 0, -20)
-width = 3.0
-default_color = Color(1, 1, 0, 1)
+points = PackedVector2Array(0, 0, 0, -18)
+width = 2.0
+default_color = Color(1, 1, 0, 0.7)
 
 [node name="NameLabel" type="Label" parent="."]
 layout_mode = 3
 offset_left = -40.0
-offset_top = -40.0
+offset_top = -44.0
 offset_right = 40.0
-offset_bottom = -20.0
+offset_bottom = -28.0
 theme_override_font_sizes/font_size = 12
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 horizontal_alignment = 1
