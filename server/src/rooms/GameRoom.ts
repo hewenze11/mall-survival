@@ -5,6 +5,7 @@ import { Zombie } from "../schemas/Zombie";
 import { WaveSystem } from "../systems/WaveSystem";
 import { FloorSystem } from "../systems/FloorSystem";
 import { ItemSystem } from "../systems/ItemSystem";
+import { CombatSystem } from "../systems/CombatSystem";
 import { configLoader } from "../config/ConfigLoader";
 
 interface MoveMessage {
@@ -34,6 +35,7 @@ export class GameRoom extends Room<GameState> {
   private waveSystem!: WaveSystem;
   private floorSystem!: FloorSystem;
   private itemSystem!: ItemSystem;
+  private combatSystem!: CombatSystem;
   private gameLoop!: ReturnType<typeof setInterval>;
   private lastTick: number = Date.now();
 
@@ -54,6 +56,7 @@ export class GameRoom extends Room<GameState> {
     this.waveSystem = new WaveSystem(this.state);
     this.floorSystem = new FloorSystem();
     this.itemSystem = new ItemSystem();
+    this.combatSystem = new CombatSystem(this);
 
     // Bind room to floor system for broadcasting
     this.floorSystem.setRoom(this);
@@ -182,6 +185,9 @@ export class GameRoom extends Room<GameState> {
 
     this.waveSystem.update(deltaTime);
 
+    // M6: 更新丧尸 AI（追击 + 近战攻击）
+    this.combatSystem.updateZombieAI(deltaTime, this.state);
+
     // 跨层检测：检测所有丧尸是否进入楼梯触发区
     this.checkZombieStairTriggers(now);
 
@@ -301,42 +307,7 @@ export class GameRoom extends Room<GameState> {
   }
 
   private handleShoot(client: Client, message: ShootMessage): void {
-    const player = this.state.players.get(client.sessionId);
-    if (!player || !player.isAlive) return;
-
-    console.log(`[GameRoom] Player ${client.sessionId} shot at (${message.targetX}, ${message.targetY})`);
-
-    // 只能击中同楼层的丧尸，武器伤害加成
-    const playerFloor = player.currentFloor;
-    let damage = 25;
-    if (player.equippedWeapon === "pistol") damage = 30;
-    else if (player.equippedWeapon === "shotgun") damage = 60;
-
-    let closestZombie: Zombie | null = null;
-    let closestDist = 100; // hit radius
-
-    this.state.zombies.forEach((zombie: Zombie) => {
-      if (zombie.currentFloor !== playerFloor) return;
-
-      const dx = zombie.x - message.targetX;
-      const dy = zombie.y - message.targetY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < closestDist) {
-        closestDist = dist;
-        closestZombie = zombie;
-      }
-    });
-
-    if (closestZombie) {
-      const z = closestZombie as Zombie;
-      z.health -= damage;
-      console.log(`[GameRoom] Hit zombie ${z.id} for ${damage} damage, health: ${z.health}`);
-      if (z.health <= 0) {
-        this.waveSystem.removeZombie(z.id);
-        this.floorSystem.removeEntity(z.id);
-        this.migrationCooldown.delete(z.id);
-        console.log(`[GameRoom] Zombie ${z.id} eliminated`);
-      }
-    }
+    // M6: 委托给 CombatSystem 处理（弹药检查、射线命中、散射、广播特效）
+    this.combatSystem.handleShoot(client.sessionId, message.targetX, message.targetY, this.state);
   }
 }
