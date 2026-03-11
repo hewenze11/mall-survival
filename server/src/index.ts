@@ -25,13 +25,17 @@ async function main() {
   // Server info endpoint
   app.get("/info", (req, res) => {
     res.json({
-      name: "Mall Survival Game Server",
+      name: "大楼求生 官方服务器",
       version: "1.0.0",
+      maxRooms: 20,
+      playersPerRoom: 4,
+      maxPlayers: 50,
       rooms: ["game"],
       endpoints: {
         websocket: `ws://localhost:${PORT}`,
         health: "/health",
         info: "/info",
+        rooms: "/rooms",
         matchmake: "/matchmake/joinOrCreate/game",
       },
     });
@@ -40,17 +44,57 @@ async function main() {
   const httpServer = createServer(app);
   const gameServer = new Server({ server: httpServer });
 
-  // Register game room
-  gameServer.define("game", GameRoom);
+  // Register game room - max 4 players per room, auto-creates new rooms when full
+  gameServer.define("game", GameRoom, { maxClients: 4 })
+    .enableRealtimeListing();
+
+  // Room list endpoint
+  app.get("/rooms", async (req, res) => {
+    try {
+      // Use Colyseus driver to query available rooms
+      const driver = (gameServer as any).driver;
+      if (driver && typeof driver.find === "function") {
+        const rooms = await driver.find({ name: "game" });
+        const roomList = rooms.map((r: any) => ({
+          roomId: r.roomId,
+          clients: r.clients,
+          maxClients: r.maxClients,
+          locked: r.locked,
+          phase: r.metadata?.phase || "WAITING",
+        }));
+        res.json({ rooms: roomList, total: roomList.length });
+      } else {
+        // Fallback: use matchmaker
+        const matchMaker = (gameServer as any).matchMaker;
+        if (matchMaker && typeof matchMaker.query === "function") {
+          const rooms = await matchMaker.query({ name: "game" });
+          const roomList = rooms.map((r: any) => ({
+            roomId: r.roomId,
+            clients: r.clients,
+            maxClients: r.maxClients || 4,
+            locked: r.locked || false,
+            phase: r.metadata?.phase || "WAITING",
+          }));
+          res.json({ rooms: roomList, total: roomList.length });
+        } else {
+          res.json({ rooms: [], total: 0, note: "Room listing not available" });
+        }
+      }
+    } catch (e: any) {
+      console.error("[/rooms] Error:", e.message);
+      res.json({ rooms: [], total: 0, error: e.message });
+    }
+  });
 
   await gameServer.listen(PORT);
 
   console.log("==============================================");
-  console.log("  Mall Survival Server (M1) Started!");
+  console.log("  Mall Survival Server Started!");
   console.log(`  Port: ${PORT}`);
   console.log(`  WebSocket: ws://0.0.0.0:${PORT}`);
   console.log(`  Health: http://0.0.0.0:${PORT}/health`);
-  console.log(`  Colyseus Monitor: http://0.0.0.0:${PORT}/colyseus`);
+  console.log(`  Rooms: http://0.0.0.0:${PORT}/rooms`);
+  console.log(`  Room capacity: 4 players/room, max 20 rooms`);
   console.log("==============================================");
 }
 

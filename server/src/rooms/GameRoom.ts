@@ -32,6 +32,9 @@ interface UseItemMessage {
 }
 
 export class GameRoom extends Room<GameState> {
+  // 每房间最多4人，满员后 Colyseus 自动创建新房间（matchmaker 行为）
+  maxClients = 4;
+
   private waveSystem!: WaveSystem;
   private floorSystem!: FloorSystem;
   private itemSystem!: ItemSystem;
