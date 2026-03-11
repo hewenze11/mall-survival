@@ -1,7 +1,7 @@
 extends CanvasLayer
 
 # HUD.gd - Heads-Up Display for Mall Survival
-# Shows health, hunger, wave number, and phase countdown
+# Shows health, hunger, wave number, phase countdown, and weapon info
 
 var _health: int = 100
 var _hunger: int = 100
@@ -13,6 +13,8 @@ var _phase: String = "PREP"
 @onready var wave_label: Label = $HUDContainer/TopBar/wave_label
 @onready var phase_label: Label = $HUDContainer/TopBar/phase_label
 @onready var ping_label: Label = $HUDContainer/TopBar/PingLabel
+@onready var weapon_label: Label = $HUDContainer/TopBar/weapon_label
+@onready var ammo_label: Label = $HUDContainer/TopBar/ammo_label
 
 
 func _ready() -> void:
@@ -20,13 +22,13 @@ func _ready() -> void:
 	update_hunger(100)
 	update_wave(1)
 	update_phase("PREP", 300.0)
+	update_weapon("none", 0)
 
 
 func update_health(value: int) -> void:
 	_health = clamp(value, 0, 100)
 	if health_label:
 		health_label.text = "❤️ %d" % _health
-		# Color feedback: red when low health
 		if _health <= 25:
 			health_label.modulate = Color(1, 0.2, 0.2, 1)
 		elif _health <= 50:
@@ -39,7 +41,6 @@ func update_hunger(value: int) -> void:
 	_hunger = clamp(value, 0, 100)
 	if hunger_label:
 		hunger_label.text = "🍖 %d" % _hunger
-		# Color feedback: orange when hungry
 		if _hunger <= 25:
 			hunger_label.modulate = Color(1, 0.3, 0.1, 1)
 		elif _hunger <= 50:
@@ -70,6 +71,16 @@ func update_phase(phase: String, countdown: float) -> void:
 			phase_label.modulate = Color(1, 1, 1, 1)
 
 
+func update_weapon(weapon: String, player_ammo: int) -> void:
+	if weapon_label:
+		match weapon:
+			"pistol":  weapon_label.text = "🔫 手枪"
+			"shotgun": weapon_label.text = "💥 霰弹枪"
+			_:         weapon_label.text = "🔫 徒手"
+	if ammo_label:
+		ammo_label.text = "💥 %d" % player_ammo
+
+
 func update_ping(status: String) -> void:
 	if ping_label:
 		ping_label.text = status
@@ -79,6 +90,5 @@ func update_ping(status: String) -> void:
 			ping_label.modulate = Color(1, 0.3, 0.3, 1)
 
 
-func show_message(text: String, duration: float = 3.0) -> void:
-	# TODO: Show a temporary message on screen
+func show_message(text: String, _duration: float = 3.0) -> void:
 	print("[HUD] Message: %s" % text)

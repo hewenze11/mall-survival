@@ -5,9 +5,11 @@ extends Node2D
 
 const PLAYER_SCENE = preload("res://scenes/Player.tscn")
 const REMOTE_PLAYER_SCENE_PATH = "res://scenes/Player.tscn"  # Reuse same visual, different script
+const ITEM_SPRITE_SCENE = preload("res://scenes/ItemSprite.tscn")
 
 var local_player: CharacterBody2D = null
 var remote_players: Dictionary = {}  # player_id -> RemotePlayer node
+var item_sprites: Dictionary = {}    # item_id -> ItemSprite node
 
 var current_wave: int = 1
 var game_phase: String = "PREP"  # "PREP" or "WAVE"
@@ -16,12 +18,15 @@ var _ping_timer: float = 0.0
 
 @onready var players_container: Node2D = $players_container
 @onready var zombies_container: Node2D = $zombies_container
+@onready var items_container: Node2D = $items_container
 @onready var hud: Node = $HUD
 @onready var camera: Camera2D = $Camera2D
+@onready var inventory_ui: CanvasLayer = $Inventory
 
 
 func _ready() -> void:
 	print("[Game] Game scene loaded")
+	add_to_group("game")
 	
 	# Connect NetworkManager signals
 	NetworkManager.state_updated.connect(_on_state_updated)
@@ -38,6 +43,12 @@ func _ready() -> void:
 		hud.add_to_group("hud")
 		hud.update_wave(current_wave)
 		hud.update_phase(game_phase, prep_countdown)
+	
+	# Wire inventory close button
+	if inventory_ui:
+		var close_btn = inventory_ui.get_node_or_null("inventory_panel/VBoxContainer/close_button")
+		if close_btn:
+			close_btn.pressed.connect(func(): inventory_ui.hide_inventory())
 
 
 func _process(delta: float) -> void:
@@ -52,6 +63,11 @@ func _process(delta: float) -> void:
 	if _ping_timer >= 2.0:
 		_ping_timer = 0.0
 		_update_ping_display()
+
+
+func _input(event: InputEvent) -> void:
+	# Tab键在Player.gd和Inventory.gd中均有处理，这里不重复
+	pass
 
 
 func _spawn_local_player() -> void:
@@ -79,7 +95,6 @@ func _spawn_remote_player(player_id: String, player_data: Dictionary) -> void:
 	var remote = scene.instantiate()
 	
 	# Override script with RemotePlayer
-	# Since we're reusing Player.tscn, set script manually
 	var remote_script = load("res://scripts/RemotePlayer.gd")
 	remote.set_script(remote_script)
 	
@@ -106,6 +121,55 @@ func _remove_remote_player(player_id: String) -> void:
 
 
 # ============================================================
+# Item management
+# ============================================================
+
+func _sync_items(items: Dictionary) -> void:
+	var current_floor = 1  # TODO: get from player state
+	
+	# Remove items no longer in state
+	var to_remove: Array = []
+	for item_id in item_sprites:
+		if not items.has(item_id):
+			to_remove.append(item_id)
+	for item_id in to_remove:
+		if item_sprites.has(item_id):
+			item_sprites[item_id].queue_free()
+			item_sprites.erase(item_id)
+	
+	# Add/update items
+	for item_id in items:
+		var item_data = items[item_id]
+		if typeof(item_data) != TYPE_DICTIONARY:
+			continue
+		
+		var item_floor = item_data.get("floor", 1)
+		# Only show items on current floor
+		if item_floor != current_floor:
+			# Hide if exists on wrong floor
+			if item_sprites.has(item_id):
+				item_sprites[item_id].visible = false
+			continue
+		
+		if not item_sprites.has(item_id):
+			# Spawn new item sprite
+			var sprite = ITEM_SPRITE_SCENE.instantiate()
+			items_container.add_child(sprite)
+			sprite.initialize(
+				item_id,
+				item_data.get("type", "food"),
+				item_data.get("name", "物品"),
+				item_data.get("x", 0.0),
+				item_data.get("y", 0.0),
+				item_floor
+			)
+			item_sprites[item_id] = sprite
+		else:
+			# Ensure visible on correct floor
+			item_sprites[item_id].visible = true
+
+
+# ============================================================
 # NetworkManager signal handlers
 # ============================================================
 
@@ -121,6 +185,10 @@ func _on_state_updated(state: Dictionary) -> void:
 	
 	if state.has("countdown"):
 		prep_countdown = state["countdown"]
+	
+	# Sync items from state
+	if state.has("items") and typeof(state["items"]) == TYPE_DICTIONARY:
+		_sync_items(state["items"])
 	
 	# Sync remote players from full state
 	if state.has("players"):
@@ -138,6 +206,12 @@ func _on_state_updated(state: Dictionary) -> void:
 						local_player.set_hunger(pdata["hunger"])
 						if hud:
 							hud.update_hunger(pdata["hunger"])
+					# Update HUD weapon/ammo display
+					if hud:
+						var weapon = pdata.get("equippedWeapon", "none")
+						var ammo = pdata.get("ammo", 0)
+						if hud.has_method("update_weapon"):
+							hud.update_weapon(weapon, ammo)
 				else:
 					if remote_players.has(pid):
 						remote_players[pid].update_state(players[pid])
@@ -174,7 +248,6 @@ func _on_disconnected() -> void:
 
 
 func _update_ping_display() -> void:
-	# Approximate ping display (real ping would require pong messages)
 	if hud:
 		var status = "ONLINE" if NetworkManager.is_connected_to_room() else "OFFLINE"
 		hud.update_ping(status)

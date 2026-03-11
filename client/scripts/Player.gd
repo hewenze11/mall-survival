@@ -9,6 +9,8 @@ const MOVE_SEND_INTERVAL: float = 0.05  # 50ms throttle for network updates
 var player_name: String = ""
 var health: int = 100
 var hunger: int = 100
+var equipped_weapon: String = "none"
+var ammo: int = 0
 var _move_timer: float = 0.0
 var _last_sent_pos: Vector2 = Vector2.ZERO
 var _camera: Camera2D = null
@@ -97,3 +99,8 @@ func set_health(new_health: int) -> void:
 
 func set_hunger(new_hunger: int) -> void:
 	hunger = new_hunger
+
+
+func set_weapon(weapon_name: String, new_ammo: int) -> void:
+	equipped_weapon = weapon_name
+	ammo = new_ammo

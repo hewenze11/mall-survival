@@ -1,0 +1,35 @@
+[gd_scene load_steps=2 format=3 uid="uid://item_sprite_scene"]
+
+[ext_resource type="Script" path="res://scripts/ItemSprite.gd" id="1_item"]
+
+[node name="ItemSprite" type="Node2D"]
+script = ExtResource("1_item")
+
+[node name="icon_label" type="Label" parent="."]
+offset_left = -16.0
+offset_top = -20.0
+offset_right = 16.0
+offset_bottom = 0.0
+theme_override_font_sizes/font_size = 22
+horizontal_alignment = 1
+
+[node name="name_label" type="Label" parent="."]
+offset_left = -40.0
+offset_top = 2.0
+offset_right = 40.0
+offset_bottom = 18.0
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
+horizontal_alignment = 1
+text = "物品"
+
+[node name="prompt_label" type="Label" parent="."]
+visible = false
+offset_left = -50.0
+offset_top = -40.0
+offset_right = 50.0
+offset_bottom = -24.0
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(1, 1, 0.4, 1)
+horizontal_alignment = 1
+text = "[E] 拾取"

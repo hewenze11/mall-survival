@@ -1,6 +1,7 @@
 import { Schema, type, MapSchema } from "@colyseus/schema";
 import { Player } from "./Player";
 import { Zombie } from "./Zombie";
+import { Item } from "./Item";
 
 export class GameState extends Schema {
   @type("string")
@@ -20,4 +21,7 @@ export class GameState extends Schema {
 
   @type("number")
   currentFloor: number = 1;
+
+  @type({ map: Item })
+  items = new MapSchema<Item>();
 }

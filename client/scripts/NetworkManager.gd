@@ -13,6 +13,9 @@ signal player_left(player_id: String)
 signal game_phase_updated(phase: String, countdown: float)
 signal damage_received(amount: int)
 signal room_error(code: int, message: String)
+signal pickup_result(success: bool, item_id: String)
+signal use_item_result(success: bool, item_key: String)
+signal items_updated(items: Dictionary)
 
 # Colyseus message protocol opcodes
 const PROTOCOL_JOIN = 10
@@ -147,6 +150,24 @@ func send_interact() -> void:
 	_send_room_message({"type": "interact"})
 
 
+func send_pickup(item_id: String) -> void:
+	if _state != ConnectionState.IN_ROOM:
+		return
+	_send_room_message({
+		"type": "pickup",
+		"itemId": item_id
+	})
+
+
+func send_use_item(item_key: String) -> void:
+	if _state != ConnectionState.IN_ROOM:
+		return
+	_send_room_message({
+		"type": "use_item",
+		"itemKey": item_key
+	})
+
+
 func is_connected_to_room() -> bool:
 	return _state == ConnectionState.IN_ROOM
 
@@ -247,6 +268,14 @@ func _dispatch_message(msg: Dictionary) -> void:
 		"damage":
 			var amount = msg.get("amount", 0)
 			damage_received.emit(amount)
+		"pickup_result":
+			var success = msg.get("success", false)
+			var item_id = msg.get("itemId", "")
+			pickup_result.emit(success, item_id)
+		"use_item_result":
+			var success = msg.get("success", false)
+			var item_key = msg.get("itemKey", "")
+			use_item_result.emit(success, item_key)
 		_:
 			if msg_type != "":
 				print("[NetworkManager] Unknown message type: %s" % msg_type)

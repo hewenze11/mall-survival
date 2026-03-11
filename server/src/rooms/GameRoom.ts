@@ -4,6 +4,7 @@ import { Player } from "../schemas/Player";
 import { Zombie } from "../schemas/Zombie";
 import { WaveSystem } from "../systems/WaveSystem";
 import { FloorSystem } from "../systems/FloorSystem";
+import { ItemSystem } from "../systems/ItemSystem";
 import { configLoader } from "../config/ConfigLoader";
 
 interface MoveMessage {
@@ -21,9 +22,18 @@ interface ChangeFloorMessage {
   targetFloor: number;
 }
 
+interface PickupMessage {
+  itemId: string;
+}
+
+interface UseItemMessage {
+  itemKey: string;
+}
+
 export class GameRoom extends Room<GameState> {
   private waveSystem!: WaveSystem;
   private floorSystem!: FloorSystem;
+  private itemSystem!: ItemSystem;
   private gameLoop!: ReturnType<typeof setInterval>;
   private lastTick: number = Date.now();
 
@@ -43,6 +53,7 @@ export class GameRoom extends Room<GameState> {
     // Initialize systems
     this.waveSystem = new WaveSystem(this.state);
     this.floorSystem = new FloorSystem();
+    this.itemSystem = new ItemSystem();
 
     // Bind room to floor system for broadcasting
     this.floorSystem.setRoom(this);
@@ -51,6 +62,9 @@ export class GameRoom extends Room<GameState> {
     this.waveSystem.setBroadcast((event: string, data: unknown) => {
       this.broadcast(event, data);
     });
+
+    // M5: Spawn initial items across all floors
+    this.itemSystem.spawnInitialItems(this.state);
 
     // Register message handlers
     this.onMessage("move", (client, message: MoveMessage) => {
@@ -68,6 +82,18 @@ export class GameRoom extends Room<GameState> {
     // 客户端主动请求楼层迁移（服务端验证）
     this.onMessage("change_floor", (client, message: ChangeFloorMessage) => {
       this.handleChangeFloor(client, message);
+    });
+
+    // M5: 物品拾取
+    this.onMessage("pickup", (client, message: PickupMessage) => {
+      const success = this.itemSystem.handlePickup(client.sessionId, message.itemId, this.state);
+      client.send("pickup_result", { success, itemId: message.itemId });
+    });
+
+    // M5: 使用物品
+    this.onMessage("use_item", (client, message: UseItemMessage) => {
+      const success = this.itemSystem.handleUseItem(client.sessionId, message.itemKey, this.state);
+      client.send("use_item_result", { success, itemKey: message.itemKey });
     });
 
     // Start game loop at ~60fps
@@ -182,13 +208,8 @@ export class GameRoom extends Room<GameState> {
 
         console.log(`[GameRoom] Zombie ${zombieId} triggered stair: floor ${fromFloor} → ${toFloor}`);
 
-        // 设置冷却，防止本帧多次触发
         this.migrationCooldown.set(zombieId, now);
-
-        // 执行迁移
         this.floorSystem.migrateEntity(zombieId, fromFloor, toFloor, this.state);
-
-        // 迁移后重新寻找同楼层的追击目标
         this.retargetZombieAfterMigration(zombieId, zombie, toFloor);
       }
     });
@@ -201,7 +222,6 @@ export class GameRoom extends Room<GameState> {
     this.state.players.forEach((player: Player, playerId: string) => {
       if (!player.isAlive) return;
 
-      // 检查迁移冷却
       const lastMigration = this.migrationCooldown.get(playerId) ?? 0;
       if (now - lastMigration < this.MIGRATION_COOLDOWN_MS) return;
 
@@ -213,11 +233,7 @@ export class GameRoom extends Room<GameState> {
         console.log(`[GameRoom] Player ${playerId} triggered stair: floor ${fromFloor} → ${toFloor}`);
 
         this.migrationCooldown.set(playerId, now);
-
-        // 执行迁移
         this.floorSystem.migrateEntity(playerId, fromFloor, toFloor, this.state);
-
-        // 更新楼层隔离记录
         this.clientFloors.set(playerId, toFloor);
       }
     });
@@ -227,7 +243,6 @@ export class GameRoom extends Room<GameState> {
    * 丧尸迁移后重新寻找同楼层的追击目标
    */
   private retargetZombieAfterMigration(zombieId: string, zombie: Zombie, newFloor: number): void {
-    // 找到同楼层的存活玩家
     const playersOnFloor: Player[] = [];
     this.state.players.forEach((player: Player) => {
       if (player.isAlive && player.currentFloor === newFloor) {
@@ -236,19 +251,15 @@ export class GameRoom extends Room<GameState> {
     });
 
     if (playersOnFloor.length > 0) {
-      // 优先保持原来的追击目标（如果目标也在新楼层）
       const currentTarget = this.state.players.get(zombie.targetPlayerId);
       if (currentTarget && currentTarget.isAlive && currentTarget.currentFloor === newFloor) {
-        // 继续追击原目标
         console.log(`[GameRoom] Zombie ${zombieId} continues targeting ${zombie.targetPlayerId} on floor ${newFloor}`);
       } else {
-        // 随机选择新楼层的玩家
         const newTarget = playersOnFloor[Math.floor(Math.random() * playersOnFloor.length)];
         zombie.targetPlayerId = newTarget.id;
         console.log(`[GameRoom] Zombie ${zombieId} retargeted to ${newTarget.id} on floor ${newFloor}`);
       }
     } else {
-      // 没有玩家在新楼层，清空追击目标
       zombie.targetPlayerId = "";
       console.log(`[GameRoom] Zombie ${zombieId} has no target on floor ${newFloor}`);
     }
@@ -256,7 +267,6 @@ export class GameRoom extends Room<GameState> {
 
   /**
    * 客户端主动请求楼层迁移（服务端验证版本）
-   * 验证玩家确实在楼梯触发区才允许切换
    */
   private handleChangeFloor(client: Client, message: ChangeFloorMessage): void {
     const player = this.state.players.get(client.sessionId);
@@ -264,7 +274,6 @@ export class GameRoom extends Room<GameState> {
 
     const { targetFloor } = message;
 
-    // 验证玩家是否在楼梯触发区
     const stairCheck = this.floorSystem.isInStairZone(player.x, player.y, player.currentFloor);
     if (!stairCheck.triggered || stairCheck.targetFloor !== targetFloor) {
       console.warn(`[GameRoom] Player ${client.sessionId} tried to change floor without being in stair zone`);
@@ -295,16 +304,18 @@ export class GameRoom extends Room<GameState> {
     const player = this.state.players.get(client.sessionId);
     if (!player || !player.isAlive) return;
 
-    // TODO(M2): Implement bullet/hit detection
     console.log(`[GameRoom] Player ${client.sessionId} shot at (${message.targetX}, ${message.targetY})`);
 
-    // 只能击中同楼层的丧尸
+    // 只能击中同楼层的丧尸，武器伤害加成
     const playerFloor = player.currentFloor;
+    let damage = 25;
+    if (player.equippedWeapon === "pistol") damage = 30;
+    else if (player.equippedWeapon === "shotgun") damage = 60;
+
     let closestZombie: Zombie | null = null;
     let closestDist = 100; // hit radius
 
     this.state.zombies.forEach((zombie: Zombie) => {
-      // 楼层隔离：只允许击中同楼层丧尸
       if (zombie.currentFloor !== playerFloor) return;
 
       const dx = zombie.x - message.targetX;
@@ -318,8 +329,8 @@ export class GameRoom extends Room<GameState> {
 
     if (closestZombie) {
       const z = closestZombie as Zombie;
-      z.health -= 25; // base damage
-      console.log(`[GameRoom] Hit zombie ${z.id}, health: ${z.health}`);
+      z.health -= damage;
+      console.log(`[GameRoom] Hit zombie ${z.id} for ${damage} damage, health: ${z.health}`);
       if (z.health <= 0) {
         this.waveSystem.removeZombie(z.id);
         this.floorSystem.removeEntity(z.id);

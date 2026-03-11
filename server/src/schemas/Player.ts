@@ -1,4 +1,5 @@
-import { Schema, type } from "@colyseus/schema";
+import { Schema, type, MapSchema } from "@colyseus/schema";
+import { InventoryItem } from "./InventoryItem";
 
 export class Player extends Schema {
   @type("string")
@@ -24,4 +25,17 @@ export class Player extends Schema {
 
   @type("number")
   currentFloor: number = 1;
+
+  // M5: Inventory system
+  @type({ map: InventoryItem })
+  inventory = new MapSchema<InventoryItem>();
+
+  @type("number")
+  inventoryCount: number = 0;
+
+  @type("string")
+  equippedWeapon: string = "none"; // "none" | "pistol" | "shotgun"
+
+  @type("number")
+  ammo: number = 0;
 }
