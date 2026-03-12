@@ -185,10 +185,14 @@ function startRoomTick(roomId: string) {
 
 function updateRoom(room: RoomState, dt: number) {
   if (room.phase === "WAITING") {
-    // 有玩家就进入 PREP
     if (room.players.size > 0) {
-      room.phase = "PREP";
-      room.countdown = PREP_DURATION;
+      // 有玩家就倒计时5秒后开始（给单人游玩用）
+      room.countdown -= dt;
+      if (room.countdown <= PREP_DURATION - 5) {
+        room.phase = "PREP";
+        room.countdown = PREP_DURATION;
+        broadcastEvent(room.roomId, { type: "phaseChange", phase: "PREP", countdown: PREP_DURATION });
+      }
     }
     return;
   }
