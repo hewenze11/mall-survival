@@ -1,6 +1,5 @@
 extends Node
 
-# ─── 信号 ─────────────────────────────────────────────────────
 signal connected
 signal disconnected
 signal state_updated(state: Dictionary)
@@ -9,117 +8,86 @@ signal player_left(id: String)
 signal phase_changed(phase: String, countdown: float)
 signal damage_received(amount: int)
 
-# ─── 状态 ─────────────────────────────────────────────────────
-enum State { IDLE, CONNECTING, CONNECTED, DISCONNECTED }
+const SERVER_HTTP := "http://104.64.211.23:2567"
+const SERVER_WS   := "ws://104.64.211.23:2567"
 
 var local_player_name: String = "Player"
 var local_player_id: String = ""
 var game_state: Dictionary = {}
-var current_state: State = State.IDLE
+var _connected: bool = false
 
 var _ws: WebSocketPeer = null
-var _server_http: String = ""
 var _ping_timer: float = 0.0
 
-const SERVER_HTTP = "http://104.64.211.23:2567"
-const SERVER_WS   = "ws://104.64.211.23:2567"
-
-# ─── 连接流程 ──────────────────────────────────────────────────
 func join_game(player_name: String) -> void:
 	local_player_name = player_name
-	current_state = State.CONNECTING
-	_server_http = SERVER_HTTP
-	_do_matchmake("/matchmake/joinOrCreate/game", {"playerName": player_name})
+	_call_join(player_name, "")
 
 func join_room(room_id: String, player_name: String) -> void:
 	local_player_name = player_name
-	current_state = State.CONNECTING
-	_server_http = SERVER_HTTP
-	_do_matchmake("/matchmake/joinById/" + room_id, {"playerName": player_name})
+	_call_join(player_name, room_id)
 
-func _do_matchmake(endpoint: String, body: Dictionary) -> void:
-	print("[NM] POST %s%s" % [_server_http, endpoint])
-	var http = HTTPRequest.new()
+func _call_join(player_name: String, room_id: String) -> void:
+	var http := HTTPRequest.new()
 	add_child(http)
-	http.request_completed.connect(func(res, code, _h, raw_body):
-		_on_matchmake_response(res, code, raw_body, http))
-	http.request(
-		_server_http + endpoint,
-		["Content-Type: application/json"],
-		HTTPClient.METHOD_POST,
-		JSON.stringify(body)
+	var body := JSON.stringify({"playerName": player_name, "roomId": room_id})
+	http.request_completed.connect(func(r, code, _h, raw):
+		http.queue_free()
+		_on_join_response(r, code, raw)
 	)
+	http.request(SERVER_HTTP + "/join", ["Content-Type: application/json"],
+		HTTPClient.METHOD_POST, body)
 
-func _on_matchmake_response(result: int, code: int, raw_body: PackedByteArray, http: HTTPRequest) -> void:
-	http.queue_free()
+func _on_join_response(result: int, code: int, raw: PackedByteArray) -> void:
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
-		print("[NM] Matchmake failed: result=%d code=%d" % [result, code])
-		current_state = State.DISCONNECTED
+		push_error("[NM] Join failed: %d %d" % [result, code])
 		disconnected.emit()
 		return
-
-	var j = JSON.new()
-	if j.parse(raw_body.get_string_from_utf8()) != OK:
-		print("[NM] JSON parse failed")
+	var j := JSON.new()
+	if j.parse(raw.get_string_from_utf8()) != OK:
 		disconnected.emit()
 		return
+	var d: Dictionary = j.get_data()
+	local_player_id = d.get("sessionId", "")
+	var ws_url: String = d.get("wsUrl", "")
+	print("[NM] Join OK → %s" % ws_url)
+	_connect_ws(ws_url)
 
-	var data = j.get_data()
-	var room = data.get("room", {})
-	var room_id = room.get("roomId", "")
-	var session_id = data.get("sessionId", "")
-	local_player_id = session_id
-
-	print("[NM] Got roomId=%s sessionId=%s" % [room_id, session_id])
-	_connect_ws(room_id, session_id)
-
-func _connect_ws(room_id: String, session_id: String) -> void:
-	var url = "%s/%s?sessionId=%s" % [SERVER_WS, room_id, session_id]
-	print("[NM] WS connect: %s" % url)
+func _connect_ws(url: String) -> void:
 	_ws = WebSocketPeer.new()
 	_ws.connect_to_url(url)
 
-# ─── _process ─────────────────────────────────────────────────
 func _process(delta: float) -> void:
 	if _ws == null:
 		return
 	_ws.poll()
-	var ws_state = _ws.get_ready_state()
+	var state := _ws.get_ready_state()
 
-	if ws_state == WebSocketPeer.STATE_OPEN:
-		if current_state != State.CONNECTED:
-			current_state = State.CONNECTED
-			print("[NM] WebSocket connected!")
+	if state == WebSocketPeer.STATE_OPEN:
+		if not _connected:
+			_connected = true
+			print("[NM] Connected!")
 			connected.emit()
-
-		# 读取所有消息
 		while _ws.get_available_packet_count() > 0:
-			var pkt = _ws.get_packet()
-			_handle_packet(pkt.get_string_from_utf8())
-
-		# Ping
+			var raw := _ws.get_packet()
+			_handle(raw.get_string_from_utf8())
 		_ping_timer += delta
 		if _ping_timer >= 5.0:
 			_ping_timer = 0.0
 			_send({"type": "ping"})
 
-	elif ws_state == WebSocketPeer.STATE_CLOSED:
-		if current_state == State.CONNECTED:
-			print("[NM] WebSocket closed")
-			current_state = State.DISCONNECTED
-			disconnected.emit()
+	elif state == WebSocketPeer.STATE_CLOSED and _connected:
+		_connected = false
+		print("[NM] Disconnected")
+		disconnected.emit()
 		_ws = null
 
-func _handle_packet(text: String) -> void:
-	var j = JSON.new()
+func _handle(text: String) -> void:
+	var j := JSON.new()
 	if j.parse(text) != OK:
 		return
-	var msg = j.get_data()
-	if typeof(msg) != TYPE_DICTIONARY:
-		return
-	var t = msg.get("type", "")
-
-	match t:
+	var msg: Dictionary = j.get_data()
+	match msg.get("type", ""):
 		"state":
 			game_state = msg.get("state", {})
 			state_updated.emit(game_state)
@@ -128,28 +96,23 @@ func _handle_packet(text: String) -> void:
 		"playerLeft":
 			player_left.emit(msg.get("id",""))
 		"phaseChange":
-			phase_changed.emit(msg.get("phase",""), msg.get("countdown", 0.0))
-		"damage":
-			damage_received.emit(msg.get("amount", 0))
-		"pong":
-			pass
+			phase_changed.emit(msg.get("phase",""), float(msg.get("countdown", 0)))
+		"playerHit":
+			if msg.get("playerId","") == local_player_id:
+				damage_received.emit(int(msg.get("amount",0)))
 
-# ─── 发送 ─────────────────────────────────────────────────────
 func _send(data: Dictionary) -> void:
 	if _ws and _ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
 		_ws.send_text(JSON.stringify(data))
 
 func send_move(x: float, y: float, dir: String) -> void:
-	_send({"type":"move", "x":x, "y":y, "dir":dir})
+	_send({"type":"move","x":x,"y":y,"dir":dir})
 
 func send_shoot(tx: float, ty: float) -> void:
-	_send({"type":"shoot", "targetX":tx, "targetY":ty})
+	_send({"type":"shoot","targetX":tx,"targetY":ty})
 
 func send_pickup(item_id: String) -> void:
-	_send({"type":"pickup", "itemId":item_id})
-
-func send_use_item(item_key: String) -> void:
-	_send({"type":"useItem", "itemKey":item_key})
+	_send({"type":"pickup","itemId":item_id})
 
 func is_connected_to_room() -> bool:
-	return current_state == State.CONNECTED
+	return _connected
